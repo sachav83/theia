@@ -45,14 +45,13 @@ export class TimelineWidget extends BaseWidget implements StatefulWidget {
     static ID = 'timeline-view';
 
     @inject(TimelineTreeWidget) protected readonly resourceWidget: TimelineTreeWidget;
-    @inject(EditorManager) protected readonly editorManager: EditorManager;
     @inject(TimelineService) protected readonly timelineService: TimelineService;
     @inject(TabBarToolbarRegistry) protected readonly tabBarToolbar: TabBarToolbarRegistry;
     @inject(CommandRegistry) protected readonly commandRegistry: CommandRegistry;
     @inject(ApplicationShell) protected readonly applicationShell: ApplicationShell;
     @inject(TimelineEmptyWidget) protected readonly timelineEmptyWidget: TimelineEmptyWidget;
 
-    constructor() {
+    constructor(@inject(EditorManager) protected readonly editorManager: EditorManager) {
         super();
         this.id = TimelineWidget.ID;
         this.addClass('theia-timeline');
@@ -76,12 +75,9 @@ export class TimelineWidget extends BaseWidget implements StatefulWidget {
             if (event.uri) {
                 this.resourceWidget.loadTimeLine(new URI(event.uri), event.reset);
             } else {
-                const editor = this.editorManager.currentEditor;
-                if (editor) {
-                    const uri = editor.getResourceUri();
-                    if (uri) {
-                        this.resourceWidget.loadTimeLine(uri, event.reset);
-                    }
+                const uri = this.editorManager.currentEditor?.getResourceUri();
+                if (uri) {
+                    this.resourceWidget.loadTimeLine(uri, event.reset);
                 }
             }
         });
@@ -108,7 +104,7 @@ export class TimelineWidget extends BaseWidget implements StatefulWidget {
             }
         });
         this.commandRegistry.registerCommand({ id: 'timeline.refresh-command' }, {
-            execute: widget => this.withWidget(widget, this.update),
+            execute: widget => this.withWidget(widget, () => this.refreshList()),
             isEnabled: widget => this.withWidget(widget, () => true),
             isVisible: widget => this.withWidget(widget, () => true)
         });
@@ -119,14 +115,21 @@ export class TimelineWidget extends BaseWidget implements StatefulWidget {
         });
     }
 
-    protected withWidget<T>(widget: Widget, cb: (navigator: TimelineWidget) => T): T | false {
+    private refreshList(): void {
+        const uri = this.editorManager.currentEditor?.getResourceUri();
+        if (uri) {
+            this.resourceWidget.loadTimeLine(uri, true);
+        }
+    }
+
+    private withWidget<T>(widget: Widget, cb: (navigator: TimelineWidget) => T): T | false {
         if (widget instanceof TimelineWidget && widget.id === TimelineWidget.ID) {
             return cb(widget);
         }
         return false;
     }
 
-    get containerLayout(): PanelLayout {
+    protected get containerLayout(): PanelLayout {
         return this.panel.layout as PanelLayout;
     }
 
