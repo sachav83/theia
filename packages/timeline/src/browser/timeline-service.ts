@@ -15,10 +15,11 @@
  ********************************************************************************/
 
 import { injectable } from 'inversify';
-import { CancellationToken, Command, Disposable, Emitter, Event } from '@theia/core/lib/common';
+import { CancellationToken, Disposable, Emitter, Event } from '@theia/core/lib/common';
 import URI from '@theia/core/lib/common/uri';
 
 export class TimelineItem {
+    handle: string;
     /**
      * A timestamp (in milliseconds since 1 January 1970 00:00:00) for when the timeline item occurred.
      */
@@ -36,11 +37,10 @@ export class TimelineItem {
      */
     id?: string;
 
-    /* font-awesome icon for compatibility */
-    icon?: string;
-    iconUrl?: IconUrl;
-
-    themeIconId?: 'folder' | 'file';
+    // /**
+    //  * The icon path or [ThemeIcon](#ThemeIcon) for the timeline item.
+    //  */
+    // iconPath?: Uri | { light: Uri; dark: Uri } | ThemeIcon;
 
     /**
      * A human readable string describing less prominent details of the timeline item.
@@ -75,12 +75,17 @@ export class TimelineItem {
     }
 }
 
-type IconUrl = string | { light: string; dark: string; };
+// type IconUrl = string | { light: string; dark: string; };
 
 export interface TimelineChangeEvent {
     id: string;
     uri: string | undefined;
     reset: boolean
+}
+
+export interface TimelineProvidersChangeEvent {
+    readonly added?: string[];
+    readonly removed?: string[];
 }
 
 export interface TimelineOptions {
@@ -90,11 +95,45 @@ export interface TimelineOptions {
 
 export interface Timeline {
     source: string;
-    items: TimelineItem[];
 
     paging?: {
-        cursor: string | undefined;
+        readonly cursor: string | undefined;
     }
+
+    items: TimelineItem[];
+}
+
+/**
+ * Command represents a particular invocation of a registered command.
+ */
+export interface Command {
+    /**
+     * The identifier of the actual command handler.
+     */
+    command?: string;
+    /**
+     * Title of the command invocation, like "Add local varible 'foo'".
+     */
+    title?: string;
+    /**
+     * A tooltip for for command, when represented in the UI.
+     */
+    tooltip?: string;
+    /**
+     * Arguments that the command handler should be
+     * invoked with.
+     */
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    arguments?: any[];
+
+    /**
+     * @deprecated use command instead
+     */
+    id?: string;
+    /**
+     * @deprecated use title instead
+     */
+    label?: string;
 }
 
 export interface TimelineRequest {
@@ -122,17 +161,18 @@ export interface TimelineSource {
 export class TimelineService {
     private readonly providers = new Map<string, TimelineProvider>();
     private readonly providerSubscriptions = new Map<string, Disposable>();
-    private readonly onDidChangeProviders = new Emitter<void>();
-    private readonly onDidChangeTimeline = new Emitter<TimelineChangeEvent>();
+
+    private readonly onDidChangeProvidersEmitter = new Emitter<TimelineProvidersChangeEvent>();
+    readonly onDidChangeProviders: Event<TimelineProvidersChangeEvent> = this.onDidChangeProvidersEmitter.event;
+
+    private readonly onDidChangeTimelineEmitter = new Emitter<TimelineChangeEvent>();
+    readonly onDidChangeTimeline: Event<TimelineChangeEvent> = this.onDidChangeTimelineEmitter.event;
 
     registerTimelineProvider(provider: TimelineProvider): Disposable {
         const id = provider.id;
 
         const existing = this.providers.get(id);
         if (existing) {
-            // For now to deal with https://github.com/microsoft/vscode/issues/89553 allow any overwritting here (still will be blocked in the Extension Host)
-            // TODO@eamodio: Ultimately will need to figure out a way to unregister providers when the Extension Host restarts/crashes
-            // throw new Error(`Timeline Provider ${id} already exists.`);
             try {
                 existing.dispose();
             } catch { }
@@ -140,22 +180,33 @@ export class TimelineService {
 
         this.providers.set(id, provider);
         if (provider.onDidChange) {
-            this.providerSubscriptions.set(id, provider.onDidChange(e => this.onDidChangeTimeline.fire(e)));
+            this.providerSubscriptions.set(id, provider.onDidChange(e => this.onDidChangeTimelineEmitter.fire(e)));
         }
-        this.onDidChangeProviders.fire(undefined);
+        this.onDidChangeProvidersEmitter.fire({ added: [id] });
 
         return {
             dispose: () => {
                 this.providers.delete(id);
-                this.onDidChangeProviders.fire(undefined);
+                this.onDidChangeProvidersEmitter.fire({ removed: [id] });
             }
         };
     }
+
+    unregisterTimelineProvider(id: string): void {
+        if (!this.providers.has(id)) {
+            return;
+        }
+
+        this.providers.delete(id);
+        this.providerSubscriptions.delete(id);
+        this.onDidChangeProvidersEmitter.fire({ removed: [id] });
+    }
+
     getSources(): TimelineSource[] {
         return [...this.providers.values()].map(p => ({ id: p.id, label: p.label }));
     }
 
-    getTimeline(id: string, uri: URI, options: TimelineOptions, tokenSource: CancellationToken, internalOptions?: TimelineOptions): TimelineRequest | undefined {
+    getTimeline(id: string, uri: URI, options: TimelineOptions, tokenSource: CancellationToken): TimelineRequest | undefined {
         const provider = this.providers.get(id);
         if (provider === undefined) {
             return undefined;

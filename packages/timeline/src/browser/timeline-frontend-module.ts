@@ -24,8 +24,10 @@ import { TimelineTreeModel } from './timeline-tree-model';
 import { TimelineEmptyWidget } from './timeline-empty-widget';
 
 import '../../src/browser/style/index.css';
+import { TimelineContextKeyService } from './timeline-context-key-service';
 
 export default new ContainerModule(bind => {
+    bind(TimelineContextKeyService).toSelf().inSingletonScope();
     bind(TimelineService).toSelf().inSingletonScope();
 
     bind(TimelineWidget).toSelf();

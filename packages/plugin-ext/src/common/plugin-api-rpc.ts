@@ -516,8 +516,9 @@ export interface TimelineExt {
 }
 
 export interface TimelineMain {
-    $registerTimelineProvider(id: string, label: string, scheme: string | string[]): void;
-    $fireTimelineChanged(e: TimelineChangeEvent | undefined): void;
+    $registerTimelineProvider(id: string, label: string, scheme: string | string[]): Promise<void>;
+    $fireTimelineChanged(e: TimelineChangeEvent | undefined): Promise<void>;
+    $unregisterTimelineProvider(source: string): Promise<void>;
 }
 
 export interface DialogsMain {

@@ -20,14 +20,18 @@ import {
     SelectableTreeNode,
     TreeModelImpl, TreeNode,
 } from '@theia/core/lib/browser/tree';
-import { Timeline } from './timeline-service';
+import { TimelineItem } from './timeline-service';
 import { Command } from '@theia/core/lib/common';
 
 export interface TimelineNode extends SelectableTreeNode {
-    command: Command | undefined
+    source: string;
+    uri: string;
+    description: string | undefined;
+    detail: string | undefined;
+    command: Command | undefined;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     commandArgs: any[];
-    description: string | undefined
+    contextValue: string | undefined;
 }
 
 export namespace TimelineNode {
@@ -39,30 +43,47 @@ export namespace TimelineNode {
 @injectable()
 export class TimelineTreeModel extends TreeModelImpl {
 
-    set timeline(timeline: Timeline | undefined) {
-        if (timeline?.items) {
-            const items = timeline.items;
-            const root = {
-                id: 'timeline-tree-root',
-                parent: undefined,
-                visible: false,
-                children: []
-            } as CompositeTreeNode;
-            root.children = items.map(item => {
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                const command: any = item.command;
-                return {
-                    id: item.id ? item.id : item.timestamp.toString(),
-                    parent: root,
-                    name: item.label,
-                    command: command,
-                    commandArgs: command.arguments,
-                    description: item.description,
-                    selected: false,
-                    visible: true
-                } as TimelineNode;
+    renderTimeline(source: string, uri: string, items: TimelineItem[], loadMore: boolean): void {
+        const root = {
+            id: 'timeline-tree-root',
+            parent: undefined,
+            visible: false,
+            children: []
+        } as CompositeTreeNode;
+        const children = items.map(item => {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const command: any = item.command;
+            return {
+                source,
+                uri,
+                id: item.id ? item.id : item.timestamp.toString(),
+                parent: root,
+                name: item.label,
+                command: command,
+                commandArgs: command.arguments,
+                description: item.description,
+                detail: item.detail,
+                contextValue: item.contextValue,
+                selected: false,
+                visible: true
+            } as TimelineNode;
+        });
+        if (loadMore) {
+            children.push({
+                source: '',
+                uri,
+                id: 'load-more',
+                parent: root,
+                name: 'Load-more',
+                description: '',
+                detail: undefined,
+                command: { id: 'timeline-load-more' },
+                commandArgs: [],
+                contextValue: undefined,
+                selected: true
             });
-            this.root = root;
         }
+        root.children = children;
+        this.root = root;
     }
 }

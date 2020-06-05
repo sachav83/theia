@@ -29,12 +29,13 @@ import {
     Widget
 } from '@theia/core/lib/browser';
 import { TimelineTreeWidget } from './timeline-tree-widget';
-import { EditorManager } from '@theia/editor/lib/browser';
+import { EditorManager, EditorWidget } from '@theia/editor/lib/browser';
 import { TimelineService } from './timeline-service';
-import { CancellationToken, CommandRegistry } from '@theia/core/lib/common';
+import { CommandRegistry } from '@theia/core/lib/common';
 import { TabBarToolbarRegistry } from '@theia/core/lib/browser/shell/tab-bar-toolbar';
 import { TimelineEmptyWidget } from './timeline-empty-widget';
-// import { toArray } from '@phosphor/algorithm';
+import { toArray } from '@phosphor/algorithm';
+import URI from '@theia/core/lib/common/uri';
 
 @injectable()
 export class TimelineWidget extends BaseWidget implements StatefulWidget {
@@ -71,41 +72,40 @@ export class TimelineWidget extends BaseWidget implements StatefulWidget {
         this.containerLayout.addWidget(this.timelineEmptyWidget);
 
         this.refresh();
-        const currentEditor = this.editorManager.activeEditor;
-        if (currentEditor) {
-            const uri = currentEditor.getResourceUri();
-            if (uri) {
-                for (const source of this.timelineService.getSources().map(s => s.id)) {
-                    const timeline = this.timelineService.getTimeline(source, uri, {}, CancellationToken.None);
-                    if (timeline) {
-                        timeline.result.then(result => {
-                            this.resourceWidget.model.timeline = result;
-                        });
+        this.timelineService.onDidChangeTimeline(event => {
+            if (event.uri) {
+                this.resourceWidget.loadTimeLine(new URI(event.uri), event.reset);
+            } else {
+                const editor = this.editorManager.currentEditor;
+                if (editor) {
+                    const uri = editor.getResourceUri();
+                    if (uri) {
+                        this.resourceWidget.loadTimeLine(uri, event.reset);
                     }
                 }
             }
-        }
+        });
         this.editorManager.onCurrentEditorChanged(async editor => {
-            console.log(editor);
             if (editor) {
                 const uri = editor.getResourceUri();
-                if (uri) {
+                if (uri?.scheme === 'file') {
                     this.timelineEmptyWidget.hide();
                     this.resourceWidget.show();
-                    for (const source of this.timelineService.getSources().map(s => s.id)) {
-                        const timeline = this.timelineService.getTimeline(source, uri, {}, CancellationToken.None);
-                        if (timeline) {
-                            this.resourceWidget.model.timeline = await timeline.result;
-                        }
-                    }
+                    this.resourceWidget.loadTimeLine(uri, true);
                 }
                 return;
             }
-            // if (toArray(this.applicationShell.mainPanel.widgets()).find(widget => widget instanceof EditorWidget)) {
-            //
-            // }
-            this.resourceWidget.hide();
-            this.timelineEmptyWidget.show();
+            if (!toArray(this.applicationShell.mainPanel.widgets()).find(widget => {
+                if (widget instanceof EditorWidget) {
+                    const uri = widget.getResourceUri();
+                    if (uri?.scheme === 'file') {
+                        return true;
+                    }
+                }
+            })) {
+                this.resourceWidget.hide();
+                this.timelineEmptyWidget.show();
+            }
         });
         this.commandRegistry.registerCommand({ id: 'timeline.refresh-command' }, {
             execute: widget => this.withWidget(widget, this.update),

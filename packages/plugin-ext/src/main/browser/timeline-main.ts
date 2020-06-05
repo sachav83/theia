@@ -35,7 +35,7 @@ export class TimelineMainImpl implements TimelineMain {
         this.service = container.get<TimelineService>(TimelineService);
     }
 
-    $registerTimelineProvider(id: string, label: string, scheme: string | string[]): void {
+    async $registerTimelineProvider(id: string, label: string, scheme: string | string[]): Promise<void> {
         const emitters = this.providerEmitters;
         let onDidChange = emitters.get(id);
         if (onDidChange === undefined) {
@@ -62,12 +62,16 @@ export class TimelineMainImpl implements TimelineMain {
         });
     }
 
-    $fireTimelineChanged(e: TimelineChangeEvent | undefined): void {
+    async $fireTimelineChanged(e: TimelineChangeEvent | undefined): Promise<void> {
         if (e) {
             const emitter = this.providerEmitters.get(e.id!);
             if (emitter) {
                 emitter.fire(e);
             }
         }
+    }
+
+    async $unregisterTimelineProvider(source: string): Promise<void> {
+        this.service.unregisterTimelineProvider(source);
     }
 }
