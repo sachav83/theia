@@ -1,6 +1,5 @@
 sudo: required
 language: node_js
-arch: ppc64le
 node_js: "10"
 git:
   depth: 1
